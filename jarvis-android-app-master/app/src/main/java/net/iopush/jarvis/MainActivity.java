@@ -66,20 +66,20 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        pBarWaitingJArvis = findViewById(R.id.pBarWaitingJArvis);
-        recyclerViewConversation = findViewById(R.id.recyclerViewConversation);
+        pBarWaitingJArvis = (ProgressBar) findViewById(R.id.pBarWaitingJArvis);
+        recyclerViewConversation = (RecyclerView) findViewById(R.id.recyclerViewConversation);
         recyclerViewConversation.setLayoutManager(new LinearLayoutManager(this));
         jarvisConversationList.add(new ConversationObject("", "J.A.R.V.I.S online. Tap the microphone to begin."));
         recyclerViewConversation.setAdapter(new ConversationAdapter(jarvisConversationList));
 
-        btnSpeak = findViewById(R.id.btnSpeak);
+        btnSpeak = (FloatingActionButton) findViewById(R.id.btnSpeak);
         btnSpeak.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 promptSpeechInput();
             }
         });
 
-        hudStatus = findViewById(R.id.hudStatus);
+        hudStatus = (TextView) findViewById(R.id.hudStatus);
         // HUD views are optional so this file remains compatible with layouts without them.
         int outerId = getResources().getIdentifier("hudOuterRing", "id", getPackageName());
         int innerId = getResources().getIdentifier("hudInnerRing", "id", getPackageName());
