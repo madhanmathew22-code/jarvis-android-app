@@ -1,415 +1,365 @@
 package net.iopush.jarvis;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.speech.RecognizerIntent;
+import android.speech.tts.TextToSpeech;
+import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.animation.LinearInterpolator;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
 
-import java.io.UnsupportedEncodingException;
+import com.android.volley.AuthFailureError;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import android.app.Activity;
-import android.content.ActivityNotFoundException;
-import android.content.Intent;
-import android.os.Bundle;
-import android.speech.RecognizerIntent;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
-import android.text.method.ScrollingMovementMethod;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
-import android.support.design.widget.FloatingActionButton;
-import android.widget.ProgressBar;
-import android.widget.TextView;
-import android.widget.Toast;
-
-import com.android.volley.NetworkResponse;
-import com.android.volley.RequestQueue;
-import com.android.volley.TimeoutError;
-import com.android.volley.toolbox.Volley;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.Request;
-import com.android.volley.VolleyError;
-import com.android.volley.Response;
-import com.android.volley.ServerError;
-import com.android.volley.NoConnectionError;
-import com.android.volley.NetworkError;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import android.util.Log;
-
-import android.speech.tts.TextToSpeech;
-
-
-
 public class MainActivity extends AppCompatActivity {
+    private static final int REQ_CODE_SPEECH_INPUT = 100;
+    private static final String TAG = "Jarvis";
 
     private FloatingActionButton btnSpeak;
     private RecyclerView recyclerViewConversation;
     private ProgressBar pBarWaitingJArvis;
-    private List<ConversationObject> jarvisConversationList = new ArrayList<>();
-    // TODO - Update alue
-    private final int REQ_CODE_SPEECH_INPUT = 100;
-    TextToSpeech ttsEngine;
+    private TextView hudStatus;
+    private View hudCore;
+    private View hudOuterRing;
+    private View hudInnerRing;
 
-    private String serverUrl;
-    private String serverPort;
-    private String serverKey;
-    private Boolean sttAtStart;
-    private Boolean muteRemoteJarvis;
-    private Boolean muteLocalJarvis;
-    private String jarvisOrder;
-    private String jarvisTrigger;
+    private final List<ConversationObject> jarvisConversationList = new ArrayList<>();
+    private TextToSpeech ttsEngine;
+    private RequestQueue requestQueue;
+    private boolean muteLocalJarvis = false;
+    private ObjectAnimator outerRotation;
+    private ObjectAnimator innerRotation;
+    private ObjectAnimator corePulse;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Setup progressbar
-        pBarWaitingJArvis = (ProgressBar) findViewById(R.id.pBarWaitingJArvis);
-
-        // Setup recyclerView
-        recyclerViewConversation = (RecyclerView) findViewById(R.id.recyclerViewConversation);
+        pBarWaitingJArvis = findViewById(R.id.pBarWaitingJArvis);
+        recyclerViewConversation = findViewById(R.id.recyclerViewConversation);
         recyclerViewConversation.setLayoutManager(new LinearLayoutManager(this));
-        jarvisConversationList.add(new ConversationObject("", getString(R.string.tap_on_mic)));
+        jarvisConversationList.add(new ConversationObject("", "J.A.R.V.I.S online. Tap the microphone to begin."));
         recyclerViewConversation.setAdapter(new ConversationAdapter(jarvisConversationList));
 
-        // Setup microphone button
-        btnSpeak = (FloatingActionButton) findViewById(R.id.btnSpeak);
+        btnSpeak = findViewById(R.id.btnSpeak);
         btnSpeak.setOnClickListener(new View.OnClickListener() {
-
-            @Override
-            public void onClick(View v) {
+            @Override public void onClick(View v) {
                 promptSpeechInput();
             }
         });
 
+        hudStatus = findViewById(R.id.hudStatus);
+        // HUD views are optional so this file remains compatible with layouts without them.
+        int outerId = getResources().getIdentifier("hudOuterRing", "id", getPackageName());
+        int innerId = getResources().getIdentifier("hudInnerRing", "id", getPackageName());
+        int coreId = getResources().getIdentifier("hudCore", "id", getPackageName());
+        if (outerId != 0) hudOuterRing = findViewById(outerId);
+        if (innerId != 0) hudInnerRing = findViewById(innerId);
+        if (coreId != 0) hudCore = findViewById(coreId);
+        startHudAnimation();
 
-        // Init TTS
+        requestQueue = Volley.newRequestQueue(getApplicationContext());
+
         ttsEngine = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
-            @Override
-            public void onInit(int status) {
-                if(status != TextToSpeech.ERROR) {
-                    // TODO - https://developer.android.com/reference/android/speech/tts/TextToSpeech.html#isLanguageAvailable(java.util.Locale)
-                    ttsEngine.setLanguage(Locale.getDefault());
+            @Override public void onInit(int status) {
+                if (status == TextToSpeech.SUCCESS && ttsEngine != null) {
+                    int result = ttsEngine.setLanguage(Locale.getDefault());
+                    if (result == TextToSpeech.LANG_MISSING_DATA ||
+                            result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        Log.w(TAG, "Default TTS language is unavailable.");
+                    }
                 } else {
-                    Log.w("Jarvis", "TTS init failed");
+                    Log.w(TAG, "Text-to-speech initialization failed.");
                 }
             }
         });
 
-        SharedPreferences SP = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
-        serverUrl = SP.getString("serverUrl", "NA");
-        serverPort = SP.getString("serverPort", "NA");
-        serverKey = SP.getString("serverKey", "");
-        sttAtStart = SP.getBoolean("sttAtStart", false);
-        muteRemoteJarvis = SP.getBoolean("muteRemoteJarvis", false);
-        muteLocalJarvis = SP.getBoolean("muteLocalJarvis", false);
-        if (sttAtStart == true) {
-            promptSpeechInput();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        muteLocalJarvis = prefs.getBoolean("muteLocalJarvis", false);
+        boolean sttAtStart = prefs.getBoolean("sttAtStart", false);
+        if (sttAtStart) {
+            btnSpeak.postDelayed(new Runnable() {
+                @Override public void run() {
+                    promptSpeechInput();
+                }
+            }, 500);
         }
     }
 
     @Override
-    public void onResume() {
-        super.onResume();  // Always call the superclass method first
-
-        // TODO : Better to call pref change listener.
-        // TODO : If change Listener is used, load parameters in onCreate().
-        SharedPreferences SP = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
-        serverUrl = SP.getString("serverUrl", "NA");
-        serverPort = SP.getString("serverPort", "NA");
-        serverKey = SP.getString("serverKey", "");
-        sttAtStart = SP.getBoolean("sttAtStart", false);
-        muteRemoteJarvis = SP.getBoolean("muteRemoteJarvis", false);
-        muteLocalJarvis = SP.getBoolean("muteLocalJarvis", false);
-        if (serverUrl == "NA") {
-            Intent i = new Intent(this, MyPreferencesActivity.class);
-            startActivity(i);
-        } else {
-            // Add "http;//" if it is missing, test only the first 4 characters in case of secure address
-            // Test length in case user did not set it, fix issue #10
-            if ((serverUrl.length()>4) && (!serverUrl.substring(0, 4).equals("http"))) {
-                serverUrl = "http://" + serverUrl;
-                SharedPreferences.Editor editor = SP.edit();
-                editor.putString("serverUrl", serverUrl);
-                editor.commit();
-            }
-            // Get Jarvis-core configuration
-            updateCoreConfig();
-        }
+    protected void onResume() {
+        super.onResume();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        muteLocalJarvis = prefs.getBoolean("muteLocalJarvis", false);
     }
 
-    /**
-     * Showing google speech input dialog
-     * */
     private void promptSpeechInput() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT,
-                getString(R.string.speech_prompt));
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to J.A.R.V.I.S.");
         try {
             startActivityForResult(intent, REQ_CODE_SPEECH_INPUT);
-            // Hide mic button, show progressbar
-            pBarWaitingJArvis.setVisibility(View.VISIBLE);
-            btnSpeak.setVisibility(View.INVISIBLE);
-        } catch (ActivityNotFoundException a) {
-            Toast.makeText(getApplicationContext(),
-                    getString(R.string.speech_not_supported),
-                    Toast.LENGTH_SHORT).show();
+            setBusy(true, "LISTENING");
+        } catch (ActivityNotFoundException e) {
+            setBusy(false, "VOICE UNAVAILABLE");
+            Toast.makeText(this, "Speech recognition is not available on this device.",
+                    Toast.LENGTH_LONG).show();
         }
-
     }
 
-    /**
-     * Receiving speech input
-     * */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_CODE_SPEECH_INPUT) return;
 
-        switch (requestCode) {
-            case REQ_CODE_SPEECH_INPUT: { // Result from STT
-                if (resultCode == RESULT_OK && null != data) {
-
-                    ArrayList<String> result = data
-                            .getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-                    jarvisOrder = result.get(0);
-                    jarvisConversationList.add(0, new ConversationObject("You", jarvisOrder));
-                    recyclerViewConversation.getAdapter().notifyItemInserted(0);
-                    recyclerViewConversation.smoothScrollToPosition(0);
-                    Log.i("Jarvis", "STT: " + jarvisOrder);
-
-                    // Instantiate the RequestQueue.
-                    RequestQueue queue = Volley.newRequestQueue(this);
-                    String requestUrl = serverUrl+":"+serverPort + "/";
-
-                    // Instantiate JSON object
-                    try {
-                        final JSONObject jsonBody = new JSONObject();
-                        jsonBody.put("order", jarvisOrder);
-                        jsonBody.put("key", serverKey);
-                        if (muteRemoteJarvis) {
-                            jsonBody.put("mute", true);
-                        }
-
-                        // Request a string response from the provided URL.
-                        // TODO - Change to JSONArrayRequest if Json-api change
-                        StringRequest stringRequest = new StringRequest(Request.Method.POST, requestUrl,
-                                new Response.Listener<String>() {
-                                    @Override
-                                    public void onResponse(String response) {
-                                        String jarvisAnswer = null;
-
-                                        // Parse answer
-                                        try {
-                                            JSONArray jObject = new JSONArray(response);
-                                            Log.i("Jarvis", "jObject" + jObject.toString());
-                                            for ( int i=0; i<jObject.length(); i++ ) {
-                                                JSONObject c = jObject.getJSONObject(i);
-                                                Log.i("Jarvis", "Answer: " + c.toString());
-                                                // Conditional JSON key, wait for jarvis-core issue #564 to be closed
-                                                if (c.has(jarvisTrigger)) {
-                                                    jarvisAnswer = c.getString(jarvisTrigger);
-                                                } else if (c.has("answer")) {
-                                                    jarvisAnswer = c.getString("answer");
-                                                }
-                                            }
-                                        } catch (final JSONException e) {
-                                            Log.e("Jarvis", "Json parsing error: " + e.getMessage());
-                                            Toast.makeText(getApplicationContext(),
-                                                    "Json parsing error: " + e.getMessage(),
-                                                    Toast.LENGTH_LONG)
-                                                    .show();
-
-                                        }
-                                        if (jarvisAnswer != null) {
-                                            jarvisConversationList.add(0, new ConversationObject(jarvisTrigger, jarvisAnswer));
-                                            recyclerViewConversation.getAdapter().notifyItemInserted(0);
-                                            recyclerViewConversation.smoothScrollToPosition(0);
-                                            if (!muteLocalJarvis) {
-                                                if (android.os.Build.VERSION.SDK_INT >= 21) {
-                                                    ttsEngine.speak(jarvisAnswer, TextToSpeech.QUEUE_ADD, null, jarvisAnswer);
-                                                } else {
-                                                    ttsEngine.speak(jarvisAnswer, TextToSpeech.QUEUE_ADD, null);
-                                                }
-                                            }
-                                        } else {
-                                            // TODO - Snackbar action button or add message to conversation list
-                                            Snackbar snackbarVolleyError = Snackbar
-                                                    .make(findViewById(R.id.mainActivity), getString(R.string.invalidAnswer), Snackbar.LENGTH_LONG);
-
-                                            snackbarVolleyError.show();
-                                        }
-                                    }
-                                }, new Response.ErrorListener() {
-                            @Override
-                            public void onErrorResponse(VolleyError error) {
-                                String defaultMessage = new String(getString(R.string.volleyError));
-                                Log.e("Jarvis-Volley", error.toString());
-                                if (error instanceof ServerError) {
-                                    // Wrong port number
-                                    defaultMessage = getString(R.string.timeoutServerNetworkError);
-                                    Log.e("Jarvis-Volley", defaultMessage);
-                                } else if (error instanceof NetworkError || error instanceof TimeoutError) {
-                                    // Jarvis down or wrong address
-                                    defaultMessage = getString(R.string.timeoutServerNetworkError);
-                                    Log.e("Jarvis-Volley", defaultMessage );
-                                } else if (error instanceof NoConnectionError) {
-                                    defaultMessage = getString(R.string.timeoutServerNetworkError);
-                                    Log.e("Jarvis-Volley", defaultMessage);
-                                }
-                                NetworkResponse response = error.networkResponse;
-                                if(response != null && response.data != null){
-                                    switch(response.statusCode) {
-                                        case 400:
-                                            String json = new String(response.data);
-                                            if (json.contains("Invalid API Key")) {
-                                                defaultMessage = getString(R.string.invalidAPIKey);
-                                            } else if (json.contains("Missing API Key") ||
-                                                    json.contains("Empty API Key")) {
-                                                defaultMessage = getString(R.string.missingAPIKey);
-                                            } else {
-                                                // TODO - Translation
-                                                defaultMessage = "Server answer: " + json;
-                                            }
-                                            break;
-                                    }
-                                }
-                                // TODO - Snackbar action button
-                                Snackbar snackbarVolleyError = Snackbar
-                                        .make(findViewById(R.id.mainActivity), defaultMessage, Snackbar.LENGTH_LONG);
-
-                                snackbarVolleyError.show();
-                            }
-                        }){
-                            @Override
-                            public byte[] getBody() {
-                                try {
-                                    return jsonBody.toString().getBytes("utf-8");
-                                } catch (UnsupportedEncodingException uee) {
-                                    Log.e("Jarvis", "Unsupported Encoding while trying to get the bytes of "+jsonBody.toString()+" using utf-8");
-                                    return null;
-                                }
-                            }
-                            @Override
-                            public Map<String, String> getHeaders() {
-                                Map<String,String> params = new HashMap<String, String>();
-                                params.put("Content-Type","application/json; charset=utf-8");
-                                return params;
-                            }
-                        };
-                        // Add the request to the RequestQueue.
-                        queue.add(stringRequest);
-                    } catch (final JSONException e) {
-                        Log.e("Jarvis", e.toString());
-                    }
-                }
-                // Hide progressBar show mic button.
-                btnSpeak.setVisibility(View.VISIBLE);
-                pBarWaitingJArvis.setVisibility(View.INVISIBLE);
-                break;
+        if (resultCode == RESULT_OK && data != null) {
+            ArrayList<String> results =
+                    data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            if (results != null && !results.isEmpty()) {
+                String userText = results.get(0);
+                jarvisConversationList.add(0, new ConversationObject("You", userText));
+                recyclerViewConversation.getAdapter().notifyItemInserted(0);
+                recyclerViewConversation.smoothScrollToPosition(0);
+                askGemini(userText);
+                return;
             }
+        }
+        setBusy(false, "READY");
+    }
+
+    private void askGemini(final String userText) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        final String apiKey = prefs.getString("geminiApiKey", "").trim();
+        if (apiKey.isEmpty()) {
+            setBusy(false, "API KEY REQUIRED");
+            Snackbar.make(findViewById(R.id.mainActivity),
+                    "Add your Gemini API key in Settings first.", Snackbar.LENGTH_LONG)
+                    .setAction("Settings", new View.OnClickListener() {
+                        @Override public void onClick(View v) {
+                            startActivity(new Intent(MainActivity.this, MyPreferencesActivity.class));
+                        }
+                    }).show();
+            return;
+        }
+
+        setBusy(true, "THINKING");
+        final String endpoint =
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+        JSONObject body = new JSONObject();
+        try {
+            JSONArray parts = new JSONArray();
+            parts.put(new JSONObject().put("text", userText));
+
+            JSONObject userContent = new JSONObject();
+            userContent.put("role", "user");
+            userContent.put("parts", parts);
+
+            JSONArray contents = new JSONArray();
+            contents.put(userContent);
+            body.put("contents", contents);
+
+            JSONObject systemPart = new JSONObject();
+            systemPart.put("text",
+                    "You are J.A.R.V.I.S., a helpful, calm, concise AI assistant. " +
+                    "Address the user respectfully. Give clear practical answers. " +
+                    "For voice responses, avoid excessive formatting and keep replies natural.");
+
+            JSONObject systemInstruction = new JSONObject();
+            JSONArray systemParts = new JSONArray();
+            systemParts.put(systemPart);
+            systemInstruction.put("parts", systemParts);
+            body.put("systemInstruction", systemInstruction);
+
+            JSONObject generationConfig = new JSONObject();
+            generationConfig.put("temperature", 0.7);
+            generationConfig.put("maxOutputTokens", 700);
+            body.put("generationConfig", generationConfig);
+        } catch (JSONException e) {
+            setBusy(false, "REQUEST ERROR");
+            showMessage("Could not prepare the AI request.");
+            return;
+        }
+
+        JsonObjectRequest request = new JsonObjectRequest(
+                Request.Method.POST, endpoint, body,
+                new Response.Listener<JSONObject>() {
+                    @Override public void onResponse(JSONObject response) {
+                        String answer = extractAnswer(response);
+                        if (answer.isEmpty()) {
+                            setBusy(false, "NO RESPONSE");
+                            showMessage("Gemini returned an empty response. Please try again.");
+                            return;
+                        }
+                        jarvisConversationList.add(0, new ConversationObject("J.A.R.V.I.S", answer));
+                        recyclerViewConversation.getAdapter().notifyItemInserted(0);
+                        recyclerViewConversation.smoothScrollToPosition(0);
+                        setBusy(false, "ONLINE");
+                        if (!muteLocalJarvis && ttsEngine != null) {
+                            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                                ttsEngine.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "jarvis_reply");
+                            } else {
+                                //noinspection deprecation
+                                ttsEngine.speak(answer, TextToSpeech.QUEUE_FLUSH, null);
+                            }
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override public void onErrorResponse(VolleyError error) {
+                        setBusy(false, "CONNECTION ERROR");
+                        String message = "Could not reach Gemini. Check your internet connection.";
+                        if (error.networkResponse != null) {
+                            int code = error.networkResponse.statusCode;
+                            if (code == 400 || code == 403) {
+                                message = "Gemini rejected the request or API key. Check your key and API access in Settings.";
+                            } else if (code == 429) {
+                                message = "Gemini request limit reached. Please try again later.";
+                            } else if (code >= 500) {
+                                message = "Gemini service is temporarily unavailable. Please try again.";
+                            }
+                            Log.e(TAG, "Gemini HTTP status: " + code);
+                        } else {
+                            Log.e(TAG, "Gemini network error", error);
+                        }
+                        showMessage(message);
+                    }
+                }) {
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Content-Type", "application/json; charset=utf-8");
+                headers.put("x-goog-api-key", apiKey);
+                return headers;
+            }
+        };
+        request.setShouldCache(false);
+        request.setRetryPolicy(new com.android.volley.DefaultRetryPolicy(
+                30000, 1, 1.0f));
+        requestQueue.add(request);
+    }
+
+    private String extractAnswer(JSONObject response) {
+        try {
+            JSONArray candidates = response.getJSONArray("candidates");
+            if (candidates.length() == 0) return "";
+            JSONObject content = candidates.getJSONObject(0).getJSONObject("content");
+            JSONArray parts = content.getJSONArray("parts");
+            StringBuilder answer = new StringBuilder();
+            for (int i = 0; i < parts.length(); i++) {
+                JSONObject part = parts.getJSONObject(i);
+                if (part.has("text")) {
+                    if (answer.length() > 0) answer.append("\n");
+                    answer.append(part.getString("text"));
+                }
+            }
+            return answer.toString().trim();
+        } catch (JSONException e) {
+            Log.e(TAG, "Could not parse Gemini response", e);
+            return "";
+        }
+    }
+
+    private void showMessage(String message) {
+        View root = findViewById(R.id.mainActivity);
+        if (root != null) {
+            Snackbar.make(root, message, Snackbar.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void setBusy(boolean busy, String status) {
+        if (pBarWaitingJArvis != null) {
+            pBarWaitingJArvis.setVisibility(busy ? View.VISIBLE : View.GONE);
+        }
+        if (btnSpeak != null) {
+            btnSpeak.setVisibility(busy ? View.INVISIBLE : View.VISIBLE);
+        }
+        if (hudStatus != null) hudStatus.setText(status);
+    }
+
+    private void startHudAnimation() {
+        if (hudOuterRing != null) {
+            outerRotation = ObjectAnimator.ofFloat(hudOuterRing, "rotation", 0f, 360f);
+            outerRotation.setDuration(14000);
+            outerRotation.setRepeatCount(ValueAnimator.INFINITE);
+            outerRotation.setInterpolator(new LinearInterpolator());
+            outerRotation.start();
+        }
+        if (hudInnerRing != null) {
+            innerRotation = ObjectAnimator.ofFloat(hudInnerRing, "rotation", 360f, 0f);
+            innerRotation.setDuration(9000);
+            innerRotation.setRepeatCount(ValueAnimator.INFINITE);
+            innerRotation.setInterpolator(new LinearInterpolator());
+            innerRotation.start();
+        }
+        if (hudCore != null) {
+            corePulse = ObjectAnimator.ofFloat(hudCore, "alpha", 0.65f, 1f);
+            corePulse.setDuration(1100);
+            corePulse.setRepeatMode(ValueAnimator.REVERSE);
+            corePulse.setRepeatCount(ValueAnimator.INFINITE);
+            corePulse.start();
         }
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            Intent i = new Intent(this, MyPreferencesActivity.class);
-            startActivity(i);
+        if (item.getItemId() == R.id.action_settings) {
+            startActivity(new Intent(this, MyPreferencesActivity.class));
+            return true;
         }
-
         return super.onOptionsItemSelected(item);
     }
 
-    private void updateCoreConfig() {
-        // TODO - Code refactoring (With other volley call)
-        RequestQueue queue = Volley.newRequestQueue(this);
-        String requestUrl = serverUrl+ ":" + serverPort + "/?action=get_config&key=" + serverKey;
-        Log.i("Jarvis", "RequestURL: " + requestUrl);
-
-        // Request a string response from the provided URL.
-        JsonObjectRequest jsObjRequest = new JsonObjectRequest
-                (Request.Method.GET, requestUrl, null, new Response.Listener<JSONObject>() {
-                    @Override
-                    public void onResponse(JSONObject response) {
-                        jarvisTrigger = "Jarvis"; // Default value
-                        try {
-                            // Get Jarvis name (Trigger word)
-                            jarvisTrigger = response.getString("trigger");
-
-                        } catch (final JSONException e) {
-                            Log.e("Jarvis", e.toString());
-                        }
-                        Log.i("Jarvis", "Trigger name:" + jarvisTrigger);
-                    }
-                }, new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        String defaultMessage = new String(getString(R.string.volleyError));
-                        Log.e("Volley", error.toString());
-                        if (error instanceof ServerError) {
-                            // Wrong port number
-                            defaultMessage = getString(R.string.timeoutServerNetworkError);
-                            Log.e("Jarvis-Volley", defaultMessage);
-                        } else if (error instanceof NetworkError || error instanceof TimeoutError) {
-                            // Jarvis down or wrong address
-                            defaultMessage = getString(R.string.timeoutServerNetworkError);
-                            Log.e("Jarvis-Volley", defaultMessage );
-                        } else if (error instanceof NoConnectionError) {
-                            defaultMessage = getString(R.string.timeoutServerNetworkError);
-                            Log.e("Jarvis-Volley", defaultMessage);
-                        }
-                        NetworkResponse response = error.networkResponse;
-                        if(response != null && response.data != null) {
-                            switch(response.statusCode) {
-                                case 400:
-                                    String json = new String(response.data);
-                                    Log.i("Jarvis", "Error json: " + json.toString());
-                                    if (json.contains("Invalid API Key")) {
-                                        defaultMessage = getString(R.string.invalidAPIKey);
-                                    }
-                                    if (json.contains("Missing API Key") ||
-                                            json.contains("Empty API Key")) {
-                                        defaultMessage = getString(R.string.missingAPIKey);
-                                    }
-                                    break;
-                            }
-                        }
-                        // TODO - Snackbar action button
-                        Snackbar snackbarVolleyError = Snackbar
-                                .make(findViewById(R.id.mainActivity), defaultMessage, Snackbar.LENGTH_LONG);
-
-                        snackbarVolleyError.show();
-                    }
-                });
-
-        // Add the request to the RequestQueue.
-        queue.add(jsObjRequest);
+    @Override
+    protected void onDestroy() {
+        if (outerRotation != null) outerRotation.cancel();
+        if (innerRotation != null) innerRotation.cancel();
+        if (corePulse != null) corePulse.cancel();
+        if (ttsEngine != null) {
+            ttsEngine.stop();
+            ttsEngine.shutdown();
+        }
+        super.onDestroy();
     }
 }
