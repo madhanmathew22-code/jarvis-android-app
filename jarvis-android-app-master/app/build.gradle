@@ -10,9 +10,9 @@ android {
     defaultConfig {
         applicationId 'net.iopush.jarvis'
         minSdk 15
-        targetSdk 25
-        versionCode 3
-        versionName 'v0.2.4'
+        targetSdk 35
+        versionCode 4
+        versionName 'v0.2.5'
         testInstrumentationRunner 'android.support.test.runner.AndroidJUnitRunner'
     }
 
