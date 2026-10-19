@@ -1,35 +1,24 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
     <EditTextPreference
-        android:key="serverUrl"
+        android:key="geminiApiKey"
+        android:title="Gemini API Key"
+        android:summary="Enter your Gemini API key. Stored on this device."
+        android:dialogTitle="Gemini API Key"
+        android:defaultValue=""
         android:selectAllOnFocus="true"
-        android:singleLine="true"
-        android:summary="@string/pref_serverUrl_summary"
-        android:title="@string/pref_serverUrl_title" />
-    <EditTextPreference
-        android:defaultValue="8080"
-        android:key="serverPort"
-        android:selectAllOnFocus="true"
-        android:singleLine="true"
-        android:summary="@string/pref_serverPort_summary"
-        android:title="@string/pref_serverPort_title" />
-    <EditTextPreference
-        android:key="serverKey"
-        android:selectAllOnFocus="true"
-        android:singleLine="true"
-        android:summary="@string/pref_serverKey_summary"
-        android:title="@string/pref_serverKey_title" />
+        android:singleLine="true" />
+
     <SwitchPreference
-        android:defaultValue="false"
-        android:key="muteRemoteJarvis"
-        android:title="@string/pref_muteRemoteJarvis" />
-    <SwitchPreference
-        android:defaultValue="false"
         android:key="muteLocalJarvis"
-        android:title="@string/pref_muteLocalJarvis" />
-    <SwitchPreference
         android:defaultValue="false"
+        android:title="Mute spoken responses" />
+
+    <SwitchPreference
         android:key="sttAtStart"
-        android:title="@string/pref_sttAtStart" />
+        android:defaultValue="false"
+        android:title="Start with voice recognition" />
+
 </PreferenceScreen>
