@@ -49,5 +49,66 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 
+    
+<LinearLayout
+    android:id="@+id/jarvisHud"
+    android:layout_width="match_parent"
+    android:layout_height="190dp"
+    android:layout_gravity="top"
+    android:layout_marginTop="8dp"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#101827"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="J.A.R.V.I.S"
+        android:textColor="#00E5FF"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.22"
+        android:fontFamily="sans-serif-light" />
+
+    <FrameLayout
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_marginTop="6dp">
+
+        <View
+            android:id="@+id/hudOuterRing"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/jarvis_hud_ring" />
+
+        <View
+            android:id="@+id/hudInnerRing"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_gravity="center"
+            android:background="@drawable/jarvis_hud_ring" />
+
+        <View
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="center"
+            android:background="@drawable/jarvis_hud_core" />
+
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/hudStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="SYSTEM ONLINE • STANDBY"
+        android:textColor="#80F4FF"
+        android:textSize="10sp"
+        android:letterSpacing="0.12" />
+
+</LinearLayout>
+
+
 
 </android.support.design.widget.CoordinatorLayout>
