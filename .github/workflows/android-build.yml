@@ -27,6 +27,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
+        working-directory: jarvis-android-app-master
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -35,6 +36,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: jarvis-android-app-master/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
